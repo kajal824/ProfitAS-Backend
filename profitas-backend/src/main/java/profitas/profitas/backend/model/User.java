@@ -4,6 +4,7 @@ import profitas.profitas.backend.model.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -31,6 +32,7 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
-    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL)
-    private List<FractionalAsset> assets;
+    @OneToMany(mappedBy = "owner")
+    @Builder.Default
+    private List<FractionalAsset> assets = new ArrayList<>();
 }

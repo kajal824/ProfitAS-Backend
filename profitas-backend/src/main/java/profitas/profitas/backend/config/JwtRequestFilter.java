@@ -4,55 +4,57 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import profitas.profitas.backend.model.User;
+import profitas.profitas.backend.repository.UserRepository;
 import profitas.profitas.backend.util.JwtUtil;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.ArrayList;
+import java.util.List;
 
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository;
 
-    public JwtRequestFilter(JwtUtil jwtUtil) {
+    public JwtRequestFilter(JwtUtil jwtUtil, UserRepository userRepository) {
         this.jwtUtil = jwtUtil;
+        this.userRepository = userRepository;
     }
 
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
-        String path = request.getRequestURI();
-        return path.startsWith("/api/v1/auth");
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/api/v1/auth");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+        String authHeader = request.getHeader("Authorization");
 
-        String username = null;
-        String jwt = null;
-
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            jwt = authHeader.substring(7);
+        if (authHeader != null && authHeader.startsWith("Bearer ")
+                && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
-                username = jwtUtil.extractEmail(jwt);
+                String email = jwtUtil.extractEmail(authHeader.substring(7));
+                // Load the user so role changes / deleted users take effect immediately.
+                User user = userRepository.findByEmail(email).orElse(null);
+                if (user != null) {
+                    var auth = new UsernamePasswordAuthenticationToken(
+                            user.getEmail(), null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
+                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+                }
             } catch (Exception e) {
-                logger.error("JWT Token extraction failed: " + e.getMessage());
-            }
-        }
-
-        if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            if (jwtUtil.validateToken(jwt, username)) {
-                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                        username, null, new ArrayList<>());
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                // Invalid/expired token: leave the request unauthenticated -> 401 from the entry point.
+                logger.debug("Rejected JWT: " + e.getMessage());
             }
         }
 
