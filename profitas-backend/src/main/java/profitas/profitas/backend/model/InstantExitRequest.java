@@ -24,14 +24,14 @@ public class InstantExitRequest {
     @JoinColumn(name = "asset_id", nullable = false)
     private FractionalAsset asset;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal originalValuation;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal haircutPercentage; // Default: 3.00
 
-    @Column(nullable = false)
-    private BigDecimal payoutAmount; // Calculated as originalValuation * (1 - haircut)
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal payoutAmount; // originalValuation * (1 - haircut)
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -42,7 +42,7 @@ public class InstantExitRequest {
 
     @PrePersist
     protected void onCreate() {
-        this.requestedAt = LocalDateTime.now();
-        this.status = ExitStatus.PENDING;
+        if (requestedAt == null) requestedAt = LocalDateTime.now();
+        if (status == null) status = ExitStatus.PENDING;
     }
 }

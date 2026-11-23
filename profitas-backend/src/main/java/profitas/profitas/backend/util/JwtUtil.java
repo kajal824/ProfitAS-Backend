@@ -3,6 +3,7 @@ package profitas.profitas.backend.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -12,20 +13,30 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    // Minimum 32-character secret key string
-    private final String SECRET_STRING = "profitas_jwt_secret_key_for_secure_authentication_2026!";
-    private final SecretKey key = Keys.hmacShaKeyFor(SECRET_STRING.getBytes(StandardCharsets.UTF_8));
-    private final long EXPIRATION_TIME = 86400000; // 24 hours in milliseconds
+    private final SecretKey key;
+    private final long expirationMs;
+
+    public JwtUtil(@Value("${jwt.secret}") String secret,
+                   @Value("${jwt.expiration-ms:86400000}") long expirationMs) {
+        byte[] bytes = secret == null ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < 32) {
+            throw new IllegalStateException("jwt.secret (JWT_SECRET) must be set and at least 32 characters long");
+        }
+        this.key = Keys.hmacShaKeyFor(bytes);
+        this.expirationMs = expirationMs;
+    }
 
     public String generateToken(String email) {
+        long now = System.currentTimeMillis();
         return Jwts.builder()
                 .subject(email)
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .issuedAt(new Date(now))
+                .expiration(new Date(now + expirationMs))
                 .signWith(key)
                 .compact();
     }
 
+    /** Verifies signature and expiry; throws a JwtException if the token is invalid or expired. */
     public String extractEmail(String token) {
         Claims claims = Jwts.parser()
                 .verifyWith(key)
@@ -33,19 +44,5 @@ public class JwtUtil {
                 .parseSignedClaims(token)
                 .getPayload();
         return claims.getSubject();
-    }
-
-    public boolean validateToken(String token, String userEmail) {
-        String extractedEmail = extractEmail(token);
-        return (extractedEmail.equals(userEmail) && !isTokenExpired(token));
-    }
-
-    private boolean isTokenExpired(String token) {
-        Claims claims = Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        return claims.getExpiration().before(new Date());
     }
 }

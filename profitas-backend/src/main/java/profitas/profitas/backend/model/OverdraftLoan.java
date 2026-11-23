@@ -24,14 +24,14 @@ public class OverdraftLoan {
     @JoinColumn(name = "asset_id", nullable = false)
     private FractionalAsset collateralAsset;
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal loanAmount; // Up to 70% LTV
 
-    @Column(nullable = false)
+    @Column(nullable = false, precision = 5, scale = 2)
     private BigDecimal interestRate; // e.g., 11.00 (% p.a.)
 
-    @Column(nullable = false)
-    private BigDecimal remainingBalance;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal remainingBalance; // principal + accrued interest - repayments
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -39,9 +39,14 @@ public class OverdraftLoan {
 
     private LocalDateTime createdAt;
 
+    /** Interest has been applied to remainingBalance up to this moment (whole days). */
+    private LocalDateTime lastAccrualAt;
+
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-        this.status = LoanStatus.ACTIVE;
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) createdAt = now;
+        if (lastAccrualAt == null) lastAccrualAt = now;
+        if (status == null) status = LoanStatus.ACTIVE;
     }
 }
